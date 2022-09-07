@@ -7,8 +7,11 @@ mod parser;
 mod expression;
 
 fn main() {
-    let input = "y * (x / π) + (5 * z * a)";
-    let expr = parser::parse(input);
+    let input = "y * (x / π) + (5 +* z * a)";
+    let expr = match parser::parse(input) {
+        Ok(expr) => expr,
+        Err(error) => panic!("{}", error)
+    };
 
     let vars = HashMap::from([
         ("x", 4f32),

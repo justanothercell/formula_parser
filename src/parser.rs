@@ -1,15 +1,17 @@
+use std::error::Error;
+use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::iter::Peekable;
 use std::str::{Chars, FromStr};
 use crate::expression::{ Expr, Op };
 
-pub(crate) fn parse(input: &str) -> Expr{
+pub(crate) fn parse(input: &str) -> Result<Expr, ParseError>{
     let mut input_iter = ParserIter::new(input);
     let here = input_iter.here();
     return parse_scope(&mut input_iter, &here, false);
 }
 
-fn parse_scope(input_iter: &mut ParserIter, start: &Lok, is_inner: bool) -> Expr{
+fn parse_scope(input_iter: &mut ParserIter, start: &Lok, is_inner: bool) -> Result<Expr, ParseError>{
     let mut tokens = Vec::<Token>::new();
     let mut finished_with_bracket = false;
     while let Some(&c) = input_iter.peek() {
@@ -23,27 +25,27 @@ fn parse_scope(input_iter: &mut ParserIter, start: &Lok, is_inner: bool) -> Expr
         }
         else if c == '(' {
             input_iter.next();
-            tokens.push(Token::Expr(parse_scope(input_iter, &input_iter.here(), true), input_iter.here()));
+            tokens.push(Token::Expr(parse_scope(input_iter, &input_iter.here(), true)?, input_iter.here()));
         }
         else if c.is_ascii_digit() {
-            tokens.push(Token::Expr(Expr::Value(parse_value(input_iter, &input_iter.here())), input_iter.here()));
+            tokens.push(Token::Expr(parse_value(input_iter, &input_iter.here())?, input_iter.here()));
         }
         else if c.is_alphabetic() {
-            tokens.push(Token::Expr(Expr::Variable(parse_variable(input_iter, &input_iter.here())), input_iter.here()));
+            tokens.push(Token::Expr(parse_variable(input_iter, &input_iter.here()), input_iter.here()));
         }
         else {
             match c {
                 '+' | '-' => tokens.push(Token::DashOp(c.to_string(), input_iter.here())),
                 '*' | '/' => tokens.push(Token::DotOp(c.to_string(), input_iter.here())),
                 '^' => tokens.push(Token::PowOp(c.to_string(), input_iter.here())),
-                _ => input_iter.here().panic(format!("Invalid token '{}'", c))
+                _ => return input_iter.here().error(format!("Invalid token '{}'", c))
             }
             input_iter.next();
         }
     }
 
     if is_inner && !finished_with_bracket {
-        start.panic("Missing closing bracket for this opening bracket".to_string());
+        return start.error("Missing closing bracket for this opening bracket".to_string());
     }
 
     macro_rules! combine_tokens {
@@ -66,11 +68,11 @@ fn parse_scope(input_iter: &mut ParserIter, start: &Lok, is_inner: bool) -> Expr
                                     }, Box::from(expr_l), Box::from(expr_r)), lok.clone()));
                                 }
                                 else{
-                                    lok.panic(format!("Invalid tokens for operation '{}': {:?} and {:?}", op, left, right));
+                                    return lok.error(format!("Invalid tokens for operation '{}': '{}' and '{}'", op, left, right));
                                 }
                             }
                             else{
-                                lok.panic(format!("Operation '{}' requires expressions on both sides", op));
+                                return lok.error(format!("Operation '{}' requires expressions on both sides", op));
                             }
                         },
                         t => combined_tokens.push(t.clone())
@@ -88,11 +90,11 @@ fn parse_scope(input_iter: &mut ParserIter, start: &Lok, is_inner: bool) -> Expr
 
     if tokens.len() == 1 {
         if let Some(Token::Expr(expr, _)) = tokens.pop(){
-            return expr;
+            return Ok(expr);
         }
     }
     if tokens.len() > 1 {
-        tokens.pop().unwrap().lok().panic("Found more than one expressions without operator in between!".to_string());
+        return tokens.pop().unwrap().lok().error("Found more than one expressions without operator in between!".to_string());
     }
 
     panic!("Expression was empty!");
@@ -131,7 +133,7 @@ impl ParserIter<'_> {
     }
 }
 
-fn parse_value(input_iter: &mut ParserIter, start: &Lok) -> f32{
+fn parse_value(input_iter: &mut ParserIter, start: &Lok) -> Result<Expr, ParseError>{
     let mut val = String::new();
     let mut had_dot = false;
     while let Some(c) = input_iter.peek() {
@@ -147,22 +149,21 @@ fn parse_value(input_iter: &mut ParserIter, start: &Lok) -> f32{
             }
             else{
                 input_iter.next();
-                input_iter.here().panic("Encountered decimal point for a second time in this number!".to_string());
+                return input_iter.here().error("Encountered decimal point for a second time in this number!".to_string());
             }
         }
         else{
             break;
         }
     }
-    if let Ok(v) = f32::from_str(val.as_str()) {
-        return v;
+    return if let Ok(v) = f32::from_str(val.as_str()) {
+        Ok(Expr::Value(v))
     } else {
-        start.panic(format!("Could not parse value {}", val));
-        0f32
+        start.error(format!("Could not parse value {}", val))
     }
 }
 
-fn parse_variable(input_iter: &mut ParserIter, start: &Lok) -> String{
+fn parse_variable(input_iter: &mut ParserIter, start: &Lok) -> Expr{
     let mut var = String::new();
     while let Some(c) = input_iter.peek() {
         if c.is_alphanumeric() {
@@ -173,7 +174,7 @@ fn parse_variable(input_iter: &mut ParserIter, start: &Lok) -> String{
             break;
         }
     }
-    return var;
+    return Expr::Variable(var);
 }
 
 #[derive(Debug, Clone)]
@@ -189,8 +190,23 @@ impl Display for Lok {
 }
 
 impl Lok {
-    fn panic(&self, msg: String) {
-        panic!("{}\n\n{}", msg, self);
+    fn error(&self, msg: String) -> Result<Expr, ParseError> {
+        Err(ParseError(format!("{}\n\n{}", msg, self)))
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ParseError(String);
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f,"{}",self.0)
+    }
+}
+
+impl Error for ParseError {
+    fn description(&self) -> &str {
+        &self.0
     }
 }
 
@@ -210,5 +226,14 @@ impl Token {
             Token::DotOp(_, lok) => lok,
             Token::DashOp(_, lok) => lok
         }
+    }
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            Token::Expr(expr, _) => format!("{}", expr),
+            Token::DotOp(op, _) | Token::PowOp(op, _) | Token::DashOp(op, _) => op.to_string(),
+        })
     }
 }

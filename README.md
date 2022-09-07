@@ -5,7 +5,10 @@ Simple but elegant formula parser in python with helpful error messages
 ````rs
 fn main(){
     let input = "y * (x / π) + (5 * z * a)";
-    let expr = parser::parse(input);
+    let expr = match parser::parse(input) {
+        Ok(expr) => expr,
+        Err(error) => panic!("{}", error)
+    };
 
     let vars = HashMap::from([
         ("x", 4f32),
@@ -29,4 +32,4 @@ fn main(){
 ````
 
 ### TODO
-- Return result instead of panicking
+- [x] Return result instead of panicking
