@@ -97,7 +97,7 @@ fn parse_scope(input_iter: &mut ParserIter, start: &Lok, is_inner: bool) -> Resu
         return tokens.pop().unwrap().lok().error("Found more than one expressions without operator in between!".to_string());
     }
 
-    panic!("Expression was empty!");
+    Ok(Expr::Value(0.0))
 }
 
 #[derive(Clone)]
@@ -137,7 +137,7 @@ fn parse_value(input_iter: &mut ParserIter, start: &Lok) -> Result<Expr, ParseEr
     let mut val = String::new();
     let mut had_dot = false;
     while let Some(c) = input_iter.peek() {
-        if c.is_alphanumeric() {
+        if c.is_ascii_digit() {
             val.push(*c);
             input_iter.next();
         }

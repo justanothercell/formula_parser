@@ -12,7 +12,7 @@ pub(crate) enum Expr {
 }
 
 impl Expr {
-    pub(crate) fn replace_vars(&self, vars: &HashMap<&str, f32>) -> Self{
+    pub(crate) fn replace_vars(&self, vars: &HashMap<String, f32>) -> Self{
         match self {
             Operation(op, box left, box right) => Operation(*op,
                                                             Box::from(left.replace_vars(vars)),
@@ -22,11 +22,11 @@ impl Expr {
         }
     }
 
-    pub(crate) fn eval(&self, vars: &HashMap<&str, f32>) -> f32{
+    pub(crate) fn eval(&self, vars: &HashMap<String, f32>) -> f32{
         match self {
             Operation(op, box left, box right) => op.eval(left, right, vars),
             Value(val) => *val,
-            Variable(var) => *vars.get(var.as_str()).expect(format!("Variable '{}' does not exist!", var).as_str())
+            Variable(var) => *vars.get(var.as_str()).unwrap_or(&0.0)
         }
     }
 
@@ -60,7 +60,7 @@ pub(crate) enum Op {
 }
 
 impl Op {
-    fn eval(&self, left: &Expr, right: &Expr, vars: &HashMap<&str, f32>) -> f32{
+    fn eval(&self, left: &Expr, right: &Expr, vars: &HashMap<String, f32>) -> f32{
         match self {
             Add => left.eval(vars) + right.eval(vars),
             Sub => left.eval(vars) - right.eval(vars),
